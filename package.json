@@ -1,0 +1,16 @@
+{
+  "name": "filter-images-template",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "process:images": "node scripts/process-images.mjs",
+    "build:data": "node scripts/generate-images-json.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  }
+}

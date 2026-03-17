@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+.env
+.env.*
+!.env.example
+platform/upload-api/.vercel/
+platform/upload-api/node_modules/
+platform/upload-api/.env.local

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Filter Image Upload</title>
+    <meta
+      name="description"
+      content="비전공자도 쉽게 쓰는 드래그 앤 드롭 이미지 업로드 페이지"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/upload.css" />
+  </head>
+  <body>
+    <main class="upload-shell">
+      <section class="upload-hero">
+        <div>
+          <p class="eyebrow">Filter Log Upload</p>
+          <h1>파일 끌어다 놓고 업로드</h1>
+          <p class="subcopy">
+            파일을 고른 뒤 업로드 암호를 입력하면 서버가 인증을 확인한 후 업로드를
+            진행합니다. 완료 후 공개 이미지 URL과 Markdown을 바로 복사할 수 있습니다.
+          </p>
+        </div>
+        <div class="hero-card">
+          <p class="hero-card-label">Upload access</p>
+          <strong id="auth-state-display">암호 필요</strong>
+          <p class="hero-card-help" id="auth-state-help">
+            업로드 암호는 서버에서 검증되며 브라우저에 secret을 저장하지 않습니다.
+          </p>
+        </div>
+      </section>
+
+      <form id="upload-form" class="upload-layout">
+        <section class="drop-panel">
+          <label id="drop-zone" class="drop-zone" for="file-input">
+            <input id="file-input" type="file" accept="image/*" multiple hidden />
+            <span class="drop-title">이미지를 여기에 놓으세요</span>
+            <span class="drop-help">또는 클릭해서 여러 장 선택</span>
+          </label>
+          <div class="drop-actions">
+            <button class="primary-button" type="button" id="pick-files-button">파일 선택</button>
+            <button class="primary-button secondary" type="submit" id="upload-button">업로드</button>
+          </div>
+        </section>
+
+        <aside class="settings-panel">
+          <label class="field">
+            <span>업로드 암호</span>
+            <input
+              id="password-input"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="업로드 암호 입력"
+            />
+          </label>
+          <label class="field">
+            <span>날짜</span>
+            <input id="date-input" name="date" type="date" />
+          </label>
+          <label class="field">
+            <span>폴더명</span>
+            <input
+              id="folder-input"
+              name="folder"
+              type="text"
+              inputmode="text"
+              autocomplete="off"
+              placeholder="예: seoul-forest"
+            />
+          </label>
+          <p class="field-help">
+            흐름: 파일 선택 -> 암호 입력 -> 업로드. 폴더명은 선택이며 비워두면 해당 월의
+            루트에 바로 저장됩니다.
+          </p>
+        </aside>
+      </form>
+
+      <section class="section-block">
+        <div class="section-head">
+          <h2>업로드 예정</h2>
+          <p id="preview-summary">아직 선택된 이미지가 없습니다.</p>
+        </div>
+        <div id="preview-grid" class="preview-grid"></div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-head">
+          <h2>업로드 결과</h2>
+          <p id="result-summary">업로드가 끝나면 결과가 여기에 표시됩니다.</p>
+        </div>
+        <div id="result-list" class="result-list"></div>
+      </section>
+
+      <section id="status-banner" class="status-banner" aria-live="polite">
+        준비되었습니다.
+      </section>
+    </main>
+
+    <script src="assets/config.js"></script>
+    <script src="assets/upload.js" type="module"></script>
+  </body>
+</html>

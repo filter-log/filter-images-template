@@ -1,0 +1,60 @@
+name: Process Uploaded Images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "incoming/**"
+      - "scripts/**"
+      - "package.json"
+      - ".github/workflows/process-images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: process-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Convert staged images and rebuild gallery data
+        env:
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO: ${{ github.event.repository.name }}
+          PUBLIC_PAGES_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          IMAGE_LONG_EDGE: 1600
+          THUMB_LONG_EDGE: 400
+          WEBP_QUALITY: 82
+        run: npm run process:images
+
+      - name: Commit generated assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add incoming images thumbs data/images.json
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: process uploaded images"
+          git push

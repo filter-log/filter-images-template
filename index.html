@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Filter Images Gallery</title>
+    <meta
+      name="description"
+      content="월별로 탐색하는 미니멀 이미지 갤러리. GitHub Pages와 GitHub Actions로 자동 갱신됩니다."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/css/style.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Filter Log Image Library</p>
+          <h1>조용한 사진 아카이브</h1>
+          <p class="hero-description">
+            업로드된 이미지는 월별로 자동 정리되며, 각 카드에서 원본 보기와 URL/Markdown
+            복사를 바로 할 수 있습니다.
+          </p>
+        </div>
+        <a class="hero-link" href="https://filter-log.github.io/" target="_blank" rel="noreferrer">
+          filter-log.github.io
+        </a>
+      </header>
+
+      <section class="toolbar" aria-label="Gallery filters">
+        <div class="toolbar-heading">
+          <p class="toolbar-label">Browse by month</p>
+          <h2>업로드 월 선택</h2>
+        </div>
+        <div id="month-filters" class="month-filters" role="tablist" aria-label="Months"></div>
+      </section>
+
+      <section class="summary-strip" aria-live="polite">
+        <div>
+          <span class="summary-label">Visible Images</span>
+          <strong id="image-count">0</strong>
+        </div>
+        <div>
+          <span class="summary-label">Active Month</span>
+          <strong id="active-month">전체</strong>
+        </div>
+      </section>
+
+      <main>
+        <div id="gallery-status" class="gallery-status">이미지 목록을 불러오는 중입니다.</div>
+        <section id="gallery-grid" class="gallery-grid" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <template id="gallery-card-template">
+      <article class="gallery-card">
+        <button class="card-image-button" type="button">
+          <img class="gallery-thumb" alt="" loading="lazy" />
+        </button>
+        <div class="card-body">
+          <div class="card-meta">
+            <p class="card-date"></p>
+            <p class="card-folder"></p>
+          </div>
+          <h3 class="card-title"></h3>
+          <p class="card-filename"></p>
+          <div class="card-actions">
+            <a class="card-link" target="_blank" rel="noreferrer">원본 보기</a>
+            <button class="quiet-button action-copy-url" type="button">URL 복사</button>
+            <button class="quiet-button action-copy-markdown" type="button">Markdown 복사</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <dialog id="image-dialog" class="image-dialog">
+      <form method="dialog" class="dialog-panel">
+        <button class="dialog-close" type="submit" aria-label="닫기">닫기</button>
+        <img id="dialog-image" alt="" />
+        <div class="dialog-caption">
+          <strong id="dialog-title"></strong>
+          <a id="dialog-link" target="_blank" rel="noreferrer">새 탭에서 원본 보기</a>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="assets/js/gallery.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "filter-upload-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@octokit/auth-app": "^7.1.0",
+    "formidable": "^3.5.1"
+  },
+  "devDependencies": {
+    "vercel": "^39.1.0"
+  }
+}
