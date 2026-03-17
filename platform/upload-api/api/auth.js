@@ -1,12 +1,17 @@
 import { clearSessionCookie, createSessionCookie, parseCookies, verifyPassword, verifySessionToken } from "../lib/auth.js";
+import { resolveTargetRepository } from "../lib/repository.js";
 
-const activeRepo = process.env.ACTIVE_IMAGE_REPO;
+const targetRepo = resolveTargetRepository();
 
 export default async function handler(req, res) {
   setCorsHeaders(req, res);
 
   if (req.method === "OPTIONS") {
     return res.status(204).end();
+  }
+
+  if (!targetRepo) {
+    return res.status(500).json({ error: "Server is missing TARGET_REPO configuration." });
   }
 
   if (req.method === "GET") {
@@ -16,7 +21,7 @@ export default async function handler(req, res) {
         ok: true,
         authenticated: Boolean(session.valid),
         expiresAt: session.expiresAt || null,
-        repository: activeRepo || null,
+        repository: targetRepo || null,
       });
     } catch (error) {
       console.error(error);
@@ -48,7 +53,7 @@ export default async function handler(req, res) {
       ok: true,
       authenticated: true,
       expiresAt: sessionCookie.expiresAt,
-      repository: activeRepo || null,
+      repository: targetRepo || null,
     });
   } catch (error) {
     console.error(error);

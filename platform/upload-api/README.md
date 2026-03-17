@@ -1,21 +1,21 @@
 # Upload API Scaffold
 
-이 폴더는 GitHub REST API로 이미지 저장소에 업로드하는 서버리스 함수 스캐폴드입니다.
+이 폴더는 레포 전용 업로드 API 스캐폴드다. 핵심 원칙은 간단하다. 배포 인스턴스 하나가 레포 하나만 수정한다.
 
 ## 권장 배포
 
-- Vercel Serverless Functions
-- 대체 가능: Netlify Functions, Cloud Run, AWS Lambda
+- 100장 업로드 운영 기준: Cloud Run, Fly.io, Render 같은 큰 request body를 처리할 수 있는 환경 권장
+- Vercel 설정 파일은 포함되어 있지만, 대용량 다중 업로드 운영에는 플랫폼 한도를 먼저 확인해야 함
 
 ## 동작 방식
 
-1. 업로드 포털이 먼저 `POST /api/auth`로 업로드 암호를 보냅니다.
-2. API는 `UPLOAD_PASSWORD`를 검증하고 HttpOnly 세션 쿠키를 발급합니다.
-3. 이후 `POST /api/upload`는 이 세션 쿠키가 없으면 401로 거부합니다.
-4. API는 `ACTIVE_IMAGE_REPO`를 읽어 현재 활성 저장소를 선택합니다.
-5. GitHub App 설치 토큰 또는 fine-grained token으로 GitHub Contents API를 호출합니다.
-6. 파일은 먼저 `incoming/YYYY/MM/optional-folder/filename.ext`에 저장됩니다.
-7. 대상 이미지 저장소의 GitHub Actions가 이를 감지해 최종 `images/`와 `thumbs/`를 생성합니다.
+1. `/upload/` 페이지가 `POST /api/auth`로 업로드 암호를 보낸다.
+2. API는 `UPLOAD_PASSWORD`를 검증하고 HttpOnly 세션 쿠키를 발급한다.
+3. `/api/upload`는 이 쿠키가 없으면 401로 거부한다.
+4. API는 `TARGET_REPO` 기준으로 자기 레포만 대상으로 삼는다.
+5. 업로드 파일은 `incoming/YYYY/MM/optional-folder/filename.ext`로 들어간다.
+6. GitHub Git Data API를 사용해 최대 100장 파일을 한 커밋 흐름으로 기록한다.
+7. 이후 해당 레포의 GitHub Actions가 후처리를 실행한다.
 
 ## 최소 권한 원칙
 
@@ -24,27 +24,29 @@ GitHub App 권장 권한:
 - `Contents: Read and write`
 - `Metadata: Read-only`
 
-설치 대상 저장소는 `filter-images-*`로만 제한합니다.
+가장 좋은 설정은 이 API 인스턴스용 App 설치를 대상 레포 하나로만 제한하는 것이다.
 
-## 환경변수
+## 필수 env
 
-`.env.example` 참고.
-
-핵심 값:
-
+- `TARGET_REPO`
+- `PUBLIC_REPOSITORY_NAME`
+- `GITHUB_OWNER`
 - `UPLOAD_PASSWORD`
 - `UPLOAD_SESSION_SECRET`
-- `UPLOAD_SESSION_TTL_SECONDS`
-- `GITHUB_OWNER`
-- `ACTIVE_IMAGE_REPO`
-- `GITHUB_APP_ID`
-- `GITHUB_APP_INSTALLATION_ID`
-- `GITHUB_APP_PRIVATE_KEY`
 - `UPLOAD_PORTAL_ORIGIN`
+
+추가 env는 `.env.example` 참고.
+
+## 왜 `TARGET_REPO`를 쓰는가
+
+- 중앙 활성 레포 전환 개념을 제거하기 위해서다.
+- `filter-images-1` API는 `TARGET_REPO=filter-images-1`
+- `filter-images-2` API는 `TARGET_REPO=filter-images-2`
+- 따라서 업로드 페이지가 잘못된 레포로 저장될 수 없다.
 
 ## 확장 포인트
 
-- 저장소 용량 상태를 기준으로 `ACTIVE_IMAGE_REPO` 대신 자동 선택 로직 추가
-- 관리자 승인 큐 추가
-- 업로드 메타데이터(DB 또는 JSON manifest) 추가
-- 브루트포스 방지용 rate limiting 추가
+- 브루트포스 방지용 rate limiting
+- 업로드 승인 큐
+- EXIF/캡션/태그 메타데이터 저장
+- 업로드 이후 webhook 기반 알림

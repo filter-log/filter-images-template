@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Filter Image Upload</title>
+    <title>Repository Upload</title>
     <meta
       name="description"
-      content="비전공자도 쉽게 쓰는 드래그 앤 드롭 이미지 업로드 페이지"
+      content="이 이미지 저장소 전용 업로드 페이지. 업로드된 파일은 현재 레포에만 저장됩니다."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -14,24 +14,28 @@
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="assets/upload.css" />
+    <link rel="stylesheet" href="../platform/upload-portal/assets/upload.css" />
   </head>
   <body>
     <main class="upload-shell">
       <section class="upload-hero">
         <div>
-          <p class="eyebrow">Filter Log Upload</p>
-          <h1>파일 끌어다 놓고 업로드</h1>
+          <p class="eyebrow">Repository Upload</p>
+          <h1>이 레포 전용 이미지 업로드</h1>
           <p class="subcopy">
-            파일을 고른 뒤 업로드 암호를 입력하면 서버가 인증을 확인한 후 업로드를
-            진행합니다. 완료 후 공개 이미지 URL과 Markdown을 바로 복사할 수 있습니다.
+            이 페이지에서 업로드한 이미지는 현재 레포에만 저장됩니다. 파일 선택, 암호 입력,
+            업로드 순서만 따라가면 됩니다.
           </p>
+          <div class="hero-actions">
+            <a class="hero-link" href="../">갤러리로 돌아가기</a>
+            <span class="limit-pill">최대 100장</span>
+          </div>
         </div>
         <div class="hero-card">
           <p class="hero-card-label">Upload access</p>
           <strong id="auth-state-display">암호 필요</strong>
           <p class="hero-card-help" id="auth-state-help">
-            업로드 암호는 서버에서 검증되며 브라우저에 secret을 저장하지 않습니다.
+            인증되면 이 레포 전용 업로드 API에만 요청이 전달됩니다.
           </p>
         </div>
       </section>
@@ -82,6 +86,16 @@
         </aside>
       </form>
 
+      <section id="progress-panel" class="progress-panel" hidden aria-live="polite">
+        <div class="section-head compact">
+          <h2>업로드 진행 상태</h2>
+          <p id="progress-text">0%</p>
+        </div>
+        <div class="progress-track">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+      </section>
+
       <section class="section-block">
         <div class="section-head">
           <h2>업로드 예정</h2>
@@ -103,7 +117,7 @@
       </section>
     </main>
 
-    <script src="assets/config.js"></script>
-    <script src="assets/upload.js" type="module"></script>
+    <script src="./config.js"></script>
+    <script src="../platform/upload-portal/assets/upload.js" type="module"></script>
   </body>
 </html>

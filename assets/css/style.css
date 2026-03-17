@@ -72,6 +72,13 @@ a {
   max-width: 600px;
 }
 
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+
 .eyebrow,
 .toolbar-label,
 .summary-label {
@@ -104,6 +111,34 @@ a {
   border: 1px solid rgba(23, 18, 13, 0.08);
   text-decoration: none;
   backdrop-filter: blur(14px);
+}
+
+.hero-link.secondary {
+  background: var(--text);
+  color: #ffffff;
+  border-color: var(--text);
+}
+
+.hero-note {
+  align-self: start;
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(23, 18, 13, 0.08);
+}
+
+.hero-note span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.hero-note strong {
+  font-size: 1.1rem;
+  letter-spacing: -0.04em;
 }
 
 .toolbar,

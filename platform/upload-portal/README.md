@@ -1,25 +1,21 @@
-# Upload Portal Scaffold
+# Upload Page Assets
 
-이 폴더는 비전공자용 업로드 전용 정적 페이지 스캐폴드입니다.
+공개 업로드 라우트는 루트의 [upload/index.html](/Users/seobeen/workspace/filter-images-template/upload/index.html#L1)이다. 이 폴더는 그 페이지가 사용하는 CSS/JS 자산을 보관한다.
 
-## 배포 위치
+## 현재 구조
 
-- 권장: `filter-log.github.io/upload/` 또는 별도 `filter-upload-portal` 저장소
-- 필요 조건: `platform/upload-api`가 배포된 API 엔드포인트 1개
-
-## 설정
-
-1. `assets/config.js`의 `authEndpoint`, `uploadEndpoint`를 실제 서버리스 API URL로 바꿉니다.
-2. 정적 파일 그대로 GitHub Pages 또는 Netlify에 배포합니다.
-3. API 쪽 CORS 허용 Origin에 이 포털 도메인을 추가합니다.
+- 실제 업로드 페이지: [upload/index.html](/Users/seobeen/workspace/filter-images-template/upload/index.html#L1)
+- 업로드 페이지 설정: [upload/config.js](/Users/seobeen/workspace/filter-images-template/upload/config.js#L1)
+- 업로드 동작 JS: [platform/upload-portal/assets/upload.js](/Users/seobeen/workspace/filter-images-template/platform/upload-portal/assets/upload.js#L1)
+- 업로드 스타일: [platform/upload-portal/assets/upload.css](/Users/seobeen/workspace/filter-images-template/platform/upload-portal/assets/upload.css#L1)
 
 ## UX 포인트
 
 - 드래그 앤 드롭
-- 여러 장 선택
+- 최대 100장 선택 제한
 - 업로드 전 미리보기
+- 업로드 진행률 표시
 - 업로드 암호 입력
 - 서버측 암호 검증 후 세션 기반 업로드
-- 날짜 기본값 자동 입력
-- 선택 폴더명 입력
-- 업로드 후 공개 URL/Markdown 복사
+- 업로드 후 성공/실패 결과 표시
+- 성공 건에 대한 URL/Markdown 복사

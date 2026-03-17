@@ -71,20 +71,59 @@ export async function listExistingNames({ owner, repo, branch, directory, token 
   return new Set(payload.filter((item) => item.type === "file").map((item) => item.name.replace(/\.[^.]+$/, "")));
 }
 
-export async function putFile({ owner, repo, branch, targetPath, contentBase64, message, token }) {
-  const encodedPath = targetPath
-    .split("/")
-    .filter(Boolean)
-    .map(encodeURIComponent)
-    .join("/");
+export async function getBranchHead({ owner, repo, branch, token }) {
+  const ref = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`, {
+    token,
+  });
+  const commit = await githubRequest(`/repos/${owner}/${repo}/git/commits/${ref.object.sha}`, { token });
 
-  return githubRequest(`/repos/${owner}/${repo}/contents/${encodedPath}`, {
-    method: "PUT",
+  return {
+    commitSha: ref.object.sha,
+    treeSha: commit.tree.sha,
+  };
+}
+
+export async function createBlob({ owner, repo, contentBase64, token }) {
+  return githubRequest(`/repos/${owner}/${repo}/git/blobs`, {
+    method: "POST",
+    token,
+    body: {
+      content: contentBase64,
+      encoding: "base64",
+    },
+  });
+}
+
+export async function createTree({ owner, repo, baseTreeSha, entries, token }) {
+  return githubRequest(`/repos/${owner}/${repo}/git/trees`, {
+    method: "POST",
+    token,
+    body: {
+      base_tree: baseTreeSha,
+      tree: entries,
+    },
+  });
+}
+
+export async function createCommit({ owner, repo, message, treeSha, parentSha, token }) {
+  return githubRequest(`/repos/${owner}/${repo}/git/commits`, {
+    method: "POST",
     token,
     body: {
       message,
-      content: contentBase64,
-      branch,
+      tree: treeSha,
+      parents: [parentSha],
+    },
+  });
+}
+
+export async function updateBranchRef({ owner, repo, branch, commitSha, token }) {
+  return githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`, {
+    method: "PATCH",
+    token,
+    body: {
+      sha: commitSha,
+      force: false,
     },
   });
 }

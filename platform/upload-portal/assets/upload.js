@@ -1,6 +1,7 @@
 const config = window.UPLOAD_PORTAL_CONFIG || {};
 const uploadEndpoint = config.uploadEndpoint || "";
 const authEndpoint = config.authEndpoint || uploadEndpoint.replace(/\/upload$/, "/auth");
+const maxFiles = Number(config.maxFiles || 100);
 
 const state = {
   files: [],
@@ -24,6 +25,9 @@ const resultSummary = document.getElementById("result-summary");
 const statusBanner = document.getElementById("status-banner");
 const authStateDisplay = document.getElementById("auth-state-display");
 const authStateHelp = document.getElementById("auth-state-help");
+const progressPanel = document.getElementById("progress-panel");
+const progressFill = document.getElementById("progress-fill");
+const progressText = document.getElementById("progress-text");
 
 dateInput.value = new Date().toISOString().slice(0, 10);
 renderAuthState();
@@ -43,18 +47,18 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
-  if (!uploadEndpoint) {
-    setStatus("`assets/config.js`에 uploadEndpoint를 먼저 설정해야 합니다.", true);
-    return;
-  }
-
-  if (!authEndpoint) {
-    setStatus("`assets/config.js`에 authEndpoint를 먼저 설정해야 합니다.", true);
+  if (!uploadEndpoint || !authEndpoint) {
+    setStatus("`upload/config.js`에 authEndpoint와 uploadEndpoint를 설정해야 합니다.", true);
     return;
   }
 
   if (!state.files.length) {
     setStatus("업로드할 이미지를 먼저 선택하세요.", true);
+    return;
+  }
+
+  if (state.files.length > maxFiles) {
+    setStatus(`한 번에 최대 ${maxFiles}장까지만 업로드할 수 있습니다.`, true);
     return;
   }
 
@@ -66,7 +70,7 @@ form.addEventListener("submit", async (event) => {
 
   state.uploading = true;
   uploadButton.disabled = true;
-  setStatus(state.authenticated ? "업로드 중입니다. 잠시만 기다리세요." : "암호를 확인하는 중입니다.");
+  setProgress(0, state.authenticated ? "업로드 준비 중" : "암호를 확인하는 중");
 
   try {
     if (!state.authenticated) {
@@ -78,29 +82,30 @@ form.addEventListener("submit", async (event) => {
     formData.set("folder", folderInput.value.trim());
     state.files.forEach((file) => formData.append("files", file));
 
-    const response = await fetch(uploadEndpoint, {
-      method: "POST",
-      body: formData,
-      credentials: "include",
-    });
-
-    const payload = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        resetAuthentication();
-      }
-      throw new Error(payload.error || "업로드에 실패했습니다.");
-    }
+    const payload = await uploadWithProgress(formData);
 
     if (payload.repository) {
-      authStateHelp.textContent = `인증됨 · 현재 활성 저장소 ${payload.repository}`;
+      authStateHelp.textContent = `인증됨 · 이 페이지는 ${payload.repository} 저장소에만 업로드합니다.`;
     }
 
-    renderResults(payload.items || []);
+    renderResults(payload.succeeded || [], payload.failed || []);
+
+    const succeededCount = payload.succeeded?.length || 0;
+    const failedCount = payload.failed?.length || 0;
+    const hasPartialFailure = succeededCount > 0 && failedCount > 0;
+
     state.files = [];
     renderPreviews();
-    setStatus(`업로드가 완료되었습니다. ${payload.items?.length || 0}개 파일이 등록되었습니다.`, false, true);
+
+    if (hasPartialFailure) {
+      setStatus(`${succeededCount}개 성공, ${failedCount}개 실패. 결과 목록을 확인하세요.`);
+    } else if (failedCount > 0) {
+      setStatus(`업로드에 실패했습니다. 실패 ${failedCount}개.`, true);
+    } else {
+      setStatus(`업로드가 완료되었습니다. ${succeededCount}개 파일이 현재 레포에 등록되었습니다.`, false, true);
+    }
+
+    setProgress(100, `전송 완료 · ${succeededCount}개 등록`);
   } catch (error) {
     console.error(error);
     setStatus(error.message || "업로드 중 오류가 발생했습니다.", true);
@@ -148,8 +153,10 @@ async function bootstrapSession() {
     state.authExpiresAt = payload.expiresAt || null;
     renderAuthState();
 
-    if (payload.repository && state.authenticated) {
-      authStateHelp.textContent = `인증 세션 유지 중 · 현재 활성 저장소 ${payload.repository}`;
+    if (payload.repository) {
+      authStateHelp.textContent = state.authenticated
+        ? `인증 세션 유지 중 · 이 페이지는 ${payload.repository} 저장소 전용입니다.`
+        : `${payload.repository} 저장소 전용 업로드 페이지입니다.`;
     }
   } catch (error) {
     console.error(error);
@@ -159,28 +166,47 @@ async function bootstrapSession() {
 function mergeFiles(fileList) {
   const nextFiles = Array.from(fileList || []).filter((file) => file.type.startsWith("image/"));
   const existingKeys = new Set(state.files.map(fileKey));
+  let skippedCount = 0;
 
   nextFiles.forEach((file) => {
     const key = fileKey(file);
-    if (!existingKeys.has(key)) {
-      state.files.push(file);
-      existingKeys.add(key);
+
+    if (existingKeys.has(key)) {
+      return;
     }
+
+    if (state.files.length >= maxFiles) {
+      skippedCount += 1;
+      return;
+    }
+
+    state.files.push(file);
+    existingKeys.add(key);
   });
 
+  if (state.files.length > maxFiles) {
+    state.files = state.files.slice(0, maxFiles);
+  }
+
   renderPreviews();
-  setStatus(`${state.files.length}개의 이미지가 선택되었습니다.`);
+
+  if (skippedCount > 0) {
+    setStatus(`최대 ${maxFiles}장까지 업로드할 수 있어 일부 파일은 추가되지 않았습니다.`, true);
+    return;
+  }
+
+  setStatus(`${state.files.length}/${maxFiles} 이미지가 선택되었습니다.`);
 }
 
 function renderPreviews() {
   previewGrid.replaceChildren();
 
   if (!state.files.length) {
-    previewSummary.textContent = "아직 선택된 이미지가 없습니다.";
+    previewSummary.textContent = `아직 선택된 이미지가 없습니다. 최대 ${maxFiles}장까지 가능합니다.`;
     return;
   }
 
-  previewSummary.textContent = `${state.files.length}개의 이미지가 업로드 대기 중입니다.`;
+  previewSummary.textContent = `${state.files.length}/${maxFiles} 이미지가 업로드 대기 중입니다.`;
 
   state.files.forEach((file) => {
     const card = document.createElement("article");
@@ -208,23 +234,24 @@ function renderPreviews() {
   });
 }
 
-function renderResults(items) {
+function renderResults(succeeded, failed) {
   resultList.replaceChildren();
+  const total = succeeded.length + failed.length;
 
-  if (!items.length) {
+  if (!total) {
     resultSummary.textContent = "업로드 응답은 받았지만 표시할 결과가 없습니다.";
     return;
   }
 
-  resultSummary.textContent = `${items.length}개의 이미지가 공개 경로 기준으로 준비되었습니다.`;
+  resultSummary.textContent = `${succeeded.length}개 성공, ${failed.length}개 실패`;
 
-  items.forEach((item) => {
+  succeeded.forEach((item) => {
     const card = document.createElement("article");
     card.className = "result-card";
 
     const header = document.createElement("div");
     header.className = "result-card-header";
-    header.textContent = "Processing queued";
+    header.textContent = "Queued for processing";
 
     const body = document.createElement("div");
     body.className = "result-card-body";
@@ -264,6 +291,30 @@ function renderResults(items) {
     card.append(header, body);
     resultList.append(card);
   });
+
+  failed.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "result-card is-failed";
+
+    const header = document.createElement("div");
+    header.className = "result-card-header";
+    header.textContent = "Upload failed";
+
+    const body = document.createElement("div");
+    body.className = "result-card-body";
+
+    const name = document.createElement("p");
+    name.className = "result-card-name";
+    name.textContent = item.sourceName || "unknown";
+
+    const meta = document.createElement("p");
+    meta.className = "result-card-meta";
+    meta.textContent = `${item.stage || "upload"} · ${item.message || "오류"}`;
+
+    body.append(name, meta);
+    card.append(header, body);
+    resultList.append(card);
+  });
 }
 
 async function authenticate() {
@@ -290,8 +341,47 @@ async function authenticate() {
   renderAuthState();
 
   if (payload.repository) {
-    authStateHelp.textContent = `인증 완료 · 현재 활성 저장소 ${payload.repository}`;
+    authStateHelp.textContent = `인증 완료 · 이 페이지는 ${payload.repository} 저장소에만 업로드합니다.`;
   }
+}
+
+function uploadWithProgress(formData) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", uploadEndpoint);
+    xhr.withCredentials = true;
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) {
+        setProgress(0, "업로드 중");
+        return;
+      }
+
+      const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
+      setProgress(percent, `전송 중 ${percent}%`);
+    });
+
+    xhr.addEventListener("load", () => {
+      const payload = safeJsonParse(xhr.responseText);
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(payload);
+        return;
+      }
+
+      if (xhr.status === 401) {
+        resetAuthentication();
+      }
+
+      reject(new Error(payload.error || "업로드에 실패했습니다."));
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("네트워크 오류로 업로드에 실패했습니다."));
+    });
+
+    xhr.send(formData);
+  });
 }
 
 async function copyText(value, button) {
@@ -326,6 +416,20 @@ function resetAuthentication() {
   authStateHelp.textContent = "세션이 없거나 만료되었습니다. 업로드 암호를 다시 입력하세요.";
 }
 
+function setProgress(percent, label) {
+  if (progressPanel) {
+    progressPanel.hidden = false;
+  }
+
+  if (progressFill) {
+    progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  }
+
+  if (progressText) {
+    progressText.textContent = label;
+  }
+}
+
 function fileKey(file) {
   return `${file.name}:${file.size}:${file.lastModified}`;
 }
@@ -341,4 +445,17 @@ function setStatus(message, isError = false, isSuccess = false) {
   statusBanner.textContent = message;
   statusBanner.classList.toggle("is-error", isError);
   statusBanner.classList.toggle("is-success", isSuccess && !isError);
+}
+
+function safeJsonParse(value) {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.error(error);
+    return {};
+  }
 }
