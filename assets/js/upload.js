@@ -1,5 +1,7 @@
 const config = window.UPLOAD_CONFIG || {};
 const maxFiles = Number(config.maxFiles || 100);
+const maxBatchFiles = Number(config.maxBatchFiles || 10);
+const maxBatchBytes = Number(config.maxBatchBytes || 24 * 1024 * 1024);
 const repoName = config.repoName || inferRepoName();
 const galleryBaseUrl = normalizeBaseUrl(config.galleryBaseUrl || inferGalleryBaseUrl());
 const workerApiBaseUrl = normalizeWorkerBaseUrl(config.workerApiUrl || "");
@@ -94,18 +96,28 @@ form.addEventListener("submit", async (event) => {
         message: payload.files.map((file) => file.targetPath).join("\n"),
       },
     ]);
-    resultSummary.textContent = "Worker base URL을 설정하면 같은 파일 정보가 실제로 전송됩니다.";
+    resultSummary.textContent = `Worker base URL을 설정하면 ${payload.batchCount}개 요청으로 나뉘어 실제 전송됩니다.`;
     setStatus("Worker API가 없어 payload 준비만 완료했습니다.", false, true);
     return;
   }
 
   state.submitting = true;
   uploadButton.disabled = true;
-  setStatus("비밀번호를 확인하고 Cloudflare Worker로 업로드 요청을 전송하는 중입니다.");
+  setStatus("비밀번호를 확인하고 Cloudflare Worker로 업로드 요청을 준비하는 중입니다.");
 
   try {
+    const batches = buildUploadBatches(state.files);
     const authToken = await authenticateWithWorker();
-    const responsePayload = await submitPayload(payload, authToken);
+    const batchResponses = [];
+
+    for (const [index, batch] of batches.entries()) {
+      setStatus(`${index + 1}/${batches.length}번째 묶음을 업로드하는 중입니다.`);
+      const responsePayload = await submitPayload(payload, authToken, batch);
+      batchResponses.push(responsePayload);
+      renderWorkerResponse(mergeBatchResponses(payload, batchResponses));
+    }
+
+    const responsePayload = mergeBatchResponses(payload, batchResponses);
     renderWorkerResponse(responsePayload);
     const hasFailures = Number(responsePayload.failedCount || 0) > 0;
     setStatus(
@@ -236,11 +248,13 @@ function syncComputedState() {
 function renderPayloadPreview(payload = buildPayloadSummary()) {
   payloadPreview.textContent = JSON.stringify(payload, null, 2);
   payloadSummary.textContent = workerApiBaseUrl
-    ? "비밀번호 인증 후 같은 파일 정보가 /upload 엔드포인트로 전송됩니다."
+    ? `비밀번호 인증 후 ${payload.batchCount}개 묶음으로 /upload 엔드포인트에 전송됩니다.`
     : "현재는 Worker가 없어서 payload 구조만 준비합니다.";
 }
 
 function buildPayloadSummary() {
+  const batches = buildUploadBatches(state.files);
+
   return {
     repoName,
     galleryBaseUrl,
@@ -250,7 +264,21 @@ function buildPayloadSummary() {
     date: readDate(),
     passwordProvided: Boolean(passwordInput.value.trim()),
     maxFiles,
+    maxBatchFiles,
+    maxBatchBytes,
     fileCount: state.files.length,
+    batchCount: batches.length,
+    batches: batches.map((batch, index) => ({
+      batchNumber: index + 1,
+      fileCount: batch.length,
+      totalBytes: getTotalBytes(batch),
+      files: batch.map((file) => ({
+        originalName: file.name,
+        sanitizedName: sanitizeFilename(file.name),
+        sizeBytes: file.size,
+        targetPath: buildTargetPath(file.name),
+      })),
+    })),
     files: state.files.map((file) => ({
       originalName: file.name,
       sanitizedName: sanitizeFilename(file.name),
@@ -281,12 +309,12 @@ async function authenticateWithWorker() {
   return responsePayload.authToken;
 }
 
-async function submitPayload(payload, authToken) {
+async function submitPayload(payload, authToken, files) {
   const formData = new FormData();
   formData.set("repoName", payload.repoName);
   formData.set("date", payload.date);
 
-  state.files.forEach((file) => {
+  files.forEach((file) => {
     formData.append("files[]", file, sanitizeFilename(file.name));
   });
 
@@ -305,6 +333,30 @@ async function submitPayload(payload, authToken) {
   }
 
   return responsePayload;
+}
+
+function mergeBatchResponses(payload, batchResponses) {
+  return batchResponses.reduce(
+    (merged, batchResponse) => {
+      merged.ok = merged.ok && Boolean(batchResponse.ok);
+      merged.uploadedCount += Number(batchResponse.uploadedCount || 0);
+      merged.failedCount += Number(batchResponse.failedCount || 0);
+      merged.uploaded.push(...(Array.isArray(batchResponse.uploaded) ? batchResponse.uploaded : []));
+      merged.failed.push(...(Array.isArray(batchResponse.failed) ? batchResponse.failed : []));
+      return merged;
+    },
+    {
+      ok: true,
+      repoName: payload.repoName,
+      date: payload.date,
+      requested: payload.fileCount,
+      batchCount: payload.batchCount,
+      uploadedCount: 0,
+      failedCount: 0,
+      uploaded: [],
+      failed: [],
+    },
+  );
 }
 
 function renderWorkerResponse(payload) {
@@ -336,7 +388,8 @@ function renderWorkerResponse(payload) {
 
   renderResultCards(cards);
   if (Array.isArray(payload.uploaded) || Array.isArray(payload.failed)) {
-    resultSummary.textContent = `성공 ${payload.uploadedCount || 0}건, 실패 ${payload.failedCount || 0}건`;
+    const batchLabel = payload.batchCount ? `, 요청 ${payload.batchCount}회` : "";
+    resultSummary.textContent = `성공 ${payload.uploadedCount || 0}건, 실패 ${payload.failedCount || 0}건${batchLabel}`;
   } else {
     resultSummary.textContent = `${cards.length}개의 응답 항목을 표시합니다.`;
   }
@@ -416,6 +469,37 @@ function setStatus(message, isError = false, isSuccess = false) {
 
 function fileKey(file) {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function buildUploadBatches(files) {
+  const batches = [];
+  let currentBatch = [];
+  let currentBytes = 0;
+
+  files.forEach((file) => {
+    const fileSize = Number(file.size || 0);
+    const exceedsFileLimit = currentBatch.length >= maxBatchFiles;
+    const exceedsByteLimit = currentBatch.length > 0 && currentBytes + fileSize > maxBatchBytes;
+
+    if (exceedsFileLimit || exceedsByteLimit) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentBytes = 0;
+    }
+
+    currentBatch.push(file);
+    currentBytes += fileSize;
+  });
+
+  if (currentBatch.length > 0) {
+    batches.push(currentBatch);
+  }
+
+  return batches;
+}
+
+function getTotalBytes(files) {
+  return files.reduce((sum, file) => sum + Number(file.size || 0), 0);
 }
 
 function formatFileSize(bytes) {
