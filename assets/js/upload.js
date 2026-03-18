@@ -2,7 +2,9 @@ const config = window.UPLOAD_CONFIG || {};
 const maxFiles = Number(config.maxFiles || 100);
 const repoName = config.repoName || inferRepoName();
 const galleryBaseUrl = normalizeBaseUrl(config.galleryBaseUrl || inferGalleryBaseUrl());
-const workerApiUrl = String(config.workerApiUrl || "").trim();
+const workerApiBaseUrl = normalizeWorkerBaseUrl(config.workerApiUrl || "");
+const authEndpoint = workerApiBaseUrl ? `${workerApiBaseUrl}/auth` : "";
+const uploadEndpoint = workerApiBaseUrl ? `${workerApiBaseUrl}/upload` : "";
 
 const state = {
   files: [],
@@ -35,15 +37,15 @@ const maxFilesPill = document.getElementById("max-files-pill");
 dateInput.value = formatDate(new Date());
 uploadTitle.textContent = `${repoName} 업로드 준비 페이지`;
 repoNameValue.textContent = repoName;
-workerEndpointValue.textContent = workerApiUrl || "Not configured";
+workerEndpointValue.textContent = workerApiBaseUrl || "Not configured";
 maxFilesPill.textContent = `최대 ${maxFiles}장`;
 
-if (workerApiUrl) {
-  workerState.textContent = "연결 준비됨";
-  workerStateCopy.textContent = `${workerApiUrl} 로 POST 요청을 보낼 준비가 되어 있습니다.`;
+if (workerApiBaseUrl) {
+  workerState.textContent = "연결됨";
+  workerStateCopy.textContent = `${authEndpoint} 인증 후 ${uploadEndpoint} 업로드를 사용합니다.`;
 } else {
   workerState.textContent = "미연결";
-  workerStateCopy.textContent = "현재는 Worker API가 비어 있어 payload만 준비합니다.";
+  workerStateCopy.textContent = "현재는 Worker API가 비어 있어 payload만 미리보기로 확인합니다.";
 }
 
 syncComputedState();
@@ -79,7 +81,7 @@ form.addEventListener("submit", async (event) => {
   const payload = buildPayloadSummary();
   renderPayloadPreview(payload);
 
-  if (!workerApiUrl) {
+  if (!workerApiBaseUrl) {
     renderResultCards([
       {
         type: "success",
@@ -92,19 +94,25 @@ form.addEventListener("submit", async (event) => {
         message: payload.files.map((file) => file.targetPath).join("\n"),
       },
     ]);
-    resultSummary.textContent = "Worker를 연결하면 동일한 payload가 실제 전송됩니다.";
+    resultSummary.textContent = "Worker base URL을 설정하면 같은 파일 정보가 실제로 전송됩니다.";
     setStatus("Worker API가 없어 payload 준비만 완료했습니다.", false, true);
     return;
   }
 
   state.submitting = true;
   uploadButton.disabled = true;
-  setStatus("Cloudflare Worker로 업로드 요청을 전송하는 중입니다.");
+  setStatus("비밀번호를 확인하고 Cloudflare Worker로 업로드 요청을 전송하는 중입니다.");
 
   try {
-    const responsePayload = await submitPayload(payload);
+    const authToken = await authenticateWithWorker();
+    const responsePayload = await submitPayload(payload, authToken);
     renderWorkerResponse(responsePayload);
-    setStatus("Worker 응답을 받았습니다.", false, true);
+    const hasFailures = Number(responsePayload.failedCount || 0) > 0;
+    setStatus(
+      hasFailures ? "일부 파일 업로드에 실패했습니다." : "모든 파일 업로드가 완료되었습니다.",
+      hasFailures,
+      !hasFailures,
+    );
   } catch (error) {
     console.error(error);
     renderResultCards([
@@ -227,8 +235,8 @@ function syncComputedState() {
 
 function renderPayloadPreview(payload = buildPayloadSummary()) {
   payloadPreview.textContent = JSON.stringify(payload, null, 2);
-  payloadSummary.textContent = workerApiUrl
-    ? "Worker가 연결되면 이 payload가 그대로 전송됩니다."
+  payloadSummary.textContent = workerApiBaseUrl
+    ? "비밀번호 인증 후 같은 파일 정보가 /upload 엔드포인트로 전송됩니다."
     : "현재는 Worker가 없어서 payload 구조만 준비합니다.";
 }
 
@@ -236,7 +244,9 @@ function buildPayloadSummary() {
   return {
     repoName,
     galleryBaseUrl,
-    workerApiUrl: workerApiUrl || null,
+    workerApiBaseUrl: workerApiBaseUrl || null,
+    authEndpoint: authEndpoint || null,
+    uploadEndpoint: uploadEndpoint || null,
     date: readDate(),
     passwordProvided: Boolean(passwordInput.value.trim()),
     maxFiles,
@@ -251,25 +261,47 @@ function buildPayloadSummary() {
   };
 }
 
-async function submitPayload(payload) {
+async function authenticateWithWorker() {
+  const response = await fetch(authEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      password: passwordInput.value.trim(),
+    }),
+  });
+
+  const responsePayload = await response.json().catch(() => ({}));
+
+  if (!response.ok || !responsePayload.ok || typeof responsePayload.authToken !== "string") {
+    throw new Error(responsePayload.error || responsePayload.message || `Auth failed with ${response.status}`);
+  }
+
+  return responsePayload.authToken;
+}
+
+async function submitPayload(payload, authToken) {
   const formData = new FormData();
   formData.set("repoName", payload.repoName);
   formData.set("date", payload.date);
-  formData.set("password", passwordInput.value.trim());
 
   state.files.forEach((file) => {
-    formData.append("files", file, sanitizeFilename(file.name));
+    formData.append("files[]", file, sanitizeFilename(file.name));
   });
 
-  const response = await fetch(workerApiUrl, {
+  const response = await fetch(uploadEndpoint, {
     method: "POST",
+    headers: {
+      Authorization: `Bearer ${authToken}`,
+    },
     body: formData,
   });
 
   const responsePayload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(responsePayload.message || `Worker returned ${response.status}`);
+    throw new Error(responsePayload.error || responsePayload.message || `Upload failed with ${response.status}`);
   }
 
   return responsePayload;
@@ -278,12 +310,20 @@ async function submitPayload(payload) {
 function renderWorkerResponse(payload) {
   const cards = [];
 
-  if (Array.isArray(payload.files) && payload.files.length) {
-    payload.files.forEach((file) => {
+  if (Array.isArray(payload.uploaded) || Array.isArray(payload.failed)) {
+    (payload.uploaded || []).forEach((file) => {
       cards.push({
         type: "success",
-        title: file.filename || "uploaded",
-        message: file.path || file.url || "Worker가 파일 정보를 반환했습니다.",
+        title: file.savedFileName || file.originalName || "uploaded",
+        message: file.savedPath || file.htmlUrl || "업로드에 성공했습니다.",
+      });
+    });
+
+    (payload.failed || []).forEach((file) => {
+      cards.push({
+        type: "error",
+        title: file.originalName || "upload failed",
+        message: file.error || "업로드에 실패했습니다.",
       });
     });
   } else {
@@ -295,7 +335,11 @@ function renderWorkerResponse(payload) {
   }
 
   renderResultCards(cards);
-  resultSummary.textContent = `${cards.length}개의 응답 항목을 표시합니다.`;
+  if (Array.isArray(payload.uploaded) || Array.isArray(payload.failed)) {
+    resultSummary.textContent = `성공 ${payload.uploadedCount || 0}건, 실패 ${payload.failedCount || 0}건`;
+  } else {
+    resultSummary.textContent = `${cards.length}개의 응답 항목을 표시합니다.`;
+  }
 }
 
 function renderResultCards(items) {
@@ -392,6 +436,10 @@ function formatDate(date) {
 
 function normalizeBaseUrl(value) {
   return String(value || "").replace(/\/+$/, "");
+}
+
+function normalizeWorkerBaseUrl(value) {
+  return normalizeBaseUrl(value).replace(/\/(?:auth|upload)$/, "");
 }
 
 function inferGalleryBaseUrl() {

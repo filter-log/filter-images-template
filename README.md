@@ -2,12 +2,12 @@
 
 `filter-images-template`는 GitHub Pages로 공개 갤러리를 배포하고, GitHub Actions로 이미지를 후처리하는 이미지 저장소 템플릿이다. 이 저장소를 template repository로 지정한 뒤 `filter-images-1`, `filter-images-2`, `filter-images-3` 같은 실제 배포용 저장소를 반복 생성하는 것이 목적이다.
 
-현재 단계는 템플릿 저장소 자체를 완성하는 단계다. 업로드 UI는 이미 포함되어 있지만, 실제 업로드 처리를 담당할 Cloudflare Worker는 아직 연결하지 않는다. 즉 지금은 `정적 갤러리 + 업로드 준비 UI + 후처리 파이프라인`까지 포함된 원형을 만드는 상태다.
+현재 템플릿은 `정적 갤러리 + Worker 연동 업로드 UI + 후처리 파이프라인`을 함께 제공한다. 새 레포를 만든 뒤 `assets/js/config.js`의 `repoName`, `galleryBaseUrl`, `workerApiUrl`만 자기 레포 기준으로 맞추면 된다.
 
 ## 이 템플릿이 만드는 것
 
 - `/` 정적 공개 갤러리
-- `/upload/` 업로드 준비 페이지
+- `/upload/` Worker 연동 업로드 페이지
 - `YYYY-MM-DD` 단일 날짜 폴더 구조
 - `incoming/2026-03-18/file.jpg` 같은 유입 경로
 - `images/2026-03-18/file.webp` 공개 이미지 경로
@@ -93,7 +93,7 @@ window.UPLOAD_CONFIG = {
 };
 ```
 
-지금 단계에서는 `workerApiUrl`을 비워 둬도 된다. 나중에 Cloudflare Worker를 연결할 때 해당 URL만 넣으면 업로드 페이지가 실제 API 호출로 넘어간다.
+템플릿 저장소 자체에서는 `workerApiUrl`을 비워 두지만, 실제 배포용 새 레포에서는 업로드 Worker base URL을 넣어야 한다.
 
 ## 비전공자 사용 흐름
 
@@ -103,8 +103,10 @@ window.UPLOAD_CONFIG = {
 4. 암호를 입력한다.
 5. 화면에서 `incoming/YYYY-MM-DD/...` 경로 미리보기를 확인한다.
 6. 업로드 버튼을 누른다.
-7. 현재 단계에서는 Worker가 연결되지 않았으면 payload만 준비된다.
-8. 이후 Worker를 연결하면 같은 UI에서 실제 업로드가 동작한다.
+7. 업로드 페이지가 Worker의 `/auth`로 암호를 검증해 짧은 Bearer 토큰을 발급받는다.
+8. 같은 화면에서 Worker의 `/upload`로 파일을 전송한다.
+9. 업로드된 파일은 `incoming/YYYY-MM-DD/...` 경로에 저장된다.
+10. 해당 레포의 GitHub Actions가 `images/`, `thumbs/`, `data/images.json`을 갱신한다.
 
 ## 공개 갤러리 동작
 
@@ -136,11 +138,12 @@ Markdown 예시:
 5. `images/2026-03-18/`와 `thumbs/2026-03-18/`에 결과를 쓴다.
 6. `data/images.json`을 다시 생성한다.
 
-## 현재 단계의 제한
+## Worker 연결 규칙
 
-- Cloudflare Worker는 아직 구현하지 않는다.
-- 업로드 페이지는 현재 `입력 UI + validation + payload 준비 + endpoint 연결 구조`까지만 완성한다.
-- 암호 검증과 실제 업로드는 다음 단계에서 Worker에 붙인다.
+- `workerApiUrl`에는 Worker의 base URL만 넣는다.
+- 프론트엔드는 `${workerApiUrl}/auth`와 `${workerApiUrl}/upload`를 사용한다.
+- `repoName`은 각 레포 이름과 정확히 같아야 한다.
+- Worker의 `ALLOWED_REPOS`에 새 레포 이름이 포함돼 있어야 한다.
 
 ## 운영자 메모
 
