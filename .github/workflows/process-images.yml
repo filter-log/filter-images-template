@@ -37,11 +37,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Convert staged images and rebuild gallery data
+      - name: Convert incoming files and rebuild images.json
         env:
-          GITHUB_OWNER: ${{ github.repository_owner }}
-          GITHUB_REPO: ${{ github.event.repository.name }}
-          PUBLIC_PAGES_BASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
           IMAGE_LONG_EDGE: 1600
           THUMB_LONG_EDGE: 400
           WEBP_QUALITY: 82

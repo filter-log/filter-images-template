@@ -1,43 +1,31 @@
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const repoRoot = process.cwd();
 const imagesRoot = path.join(repoRoot, "images");
 const outputFile = path.join(repoRoot, "data", "images.json");
-const owner = process.env.GITHUB_REPOSITORY_OWNER || process.env.GITHUB_OWNER || "";
-const repo = process.env.GITHUB_REPOSITORY?.split("/")[1] || process.env.GITHUB_REPO || "";
-const pagesBaseUrl =
-  process.env.PUBLIC_PAGES_BASE_URL ||
-  (owner && repo ? `https://${owner}.github.io/${repo}` : "");
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const items = [];
 
-await walkImages(imagesRoot);
+await collectImages();
+
 items.sort((left, right) => {
-  const leftKey = `${left.year}${String(left.month).padStart(2, "0")}${String(left.day || "00").padStart(2, "0")}${left.filename}`;
-  const rightKey = `${right.year}${String(right.month).padStart(2, "0")}${String(right.day || "00").padStart(2, "0")}${right.filename}`;
-  return leftKey < rightKey ? 1 : -1;
+  if (left.date !== right.date) {
+    return left.date < right.date ? 1 : -1;
+  }
+
+  return left.filename.localeCompare(right.filename);
 });
 
 await mkdir(path.dirname(outputFile), { recursive: true });
-await writeFile(
-  outputFile,
-  JSON.stringify(
-    {
-      generatedAt: new Date().toISOString(),
-      repo,
-      items,
-    },
-    null,
-    2,
-  ) + "\n",
-);
+await writeFile(outputFile, `${JSON.stringify(items, null, 2)}\n`);
 
-async function walkImages(currentDir) {
-  let entries;
+async function collectImages() {
+  let dateEntries;
 
   try {
-    entries = await readdir(currentDir, { withFileTypes: true });
+    dateEntries = await readdir(imagesRoot, { withFileTypes: true });
   } catch (error) {
     if (error.code === "ENOENT") {
       return;
@@ -45,51 +33,29 @@ async function walkImages(currentDir) {
     throw error;
   }
 
-  for (const entry of entries) {
-    const fullPath = path.join(currentDir, entry.name);
-
-    if (entry.isDirectory()) {
-      await walkImages(fullPath);
+  for (const dateEntry of dateEntries) {
+    if (!dateEntry.isDirectory() || !DATE_PATTERN.test(dateEntry.name)) {
       continue;
     }
 
-    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".webp")) {
-      continue;
+    const dateDir = path.join(imagesRoot, dateEntry.name);
+    const fileEntries = await readdir(dateDir, { withFileTypes: true });
+
+    for (const fileEntry of fileEntries) {
+      if (!fileEntry.isFile() || !fileEntry.name.toLowerCase().endsWith(".webp")) {
+        continue;
+      }
+
+      const filename = fileEntry.name;
+      items.push({
+        src: `images/${dateEntry.name}/${filename}`,
+        thumb: `thumbs/${dateEntry.name}/${filename}`,
+        date: dateEntry.name,
+        title: humanizeTitle(filename),
+        filename,
+      });
     }
-
-    const relative = path.relative(imagesRoot, fullPath).split(path.sep);
-    const [year, month, ...rest] = relative;
-    const filename = rest.pop();
-    const folder = rest.join("/");
-    const fileStat = await stat(fullPath);
-
-    if (!year || !month || !filename) {
-      continue;
-    }
-
-    const basePath = path.posix.join("images", year, month, folder, filename).replace(/\/+/g, "/");
-    const thumbPath = path.posix.join("thumbs", year, month, folder, filename).replace(/\/+/g, "/");
-
-    items.push({
-      src: resolvePublicPath(basePath),
-      thumb: resolvePublicPath(thumbPath),
-      year: Number(year),
-      month: Number(month),
-      day: fileStat.mtime.getUTCDate(),
-      folder,
-      title: humanizeTitle(filename),
-      filename,
-      updatedAt: fileStat.mtime.toISOString(),
-    });
   }
-}
-
-function resolvePublicPath(relativePath) {
-  if (!pagesBaseUrl) {
-    return `/${relativePath}`;
-  }
-
-  return `${pagesBaseUrl.replace(/\/$/, "")}/${relativePath}`;
 }
 
 function humanizeTitle(filename) {
@@ -97,6 +63,5 @@ function humanizeTitle(filename) {
     .replace(/\.webp$/i, "")
     .split("-")
     .filter(Boolean)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
     .join(" ");
 }

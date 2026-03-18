@@ -1,84 +1,79 @@
 # Architecture
 
-## 전체 구성
+## 현재 단계의 범위
 
-이 구조는 레포 단위로 완전히 독립 동작한다.
+이 저장소는 `filter-images-1`, `filter-images-2`, `filter-images-3` 같은 실제 이미지 저장소를 만들기 위한 템플릿이다. 현재 단계에서는 템플릿 저장소만 완성한다.
 
-1. GitHub Pages 갤러리
+포함되는 것:
+
+- GitHub Pages 공개 갤러리
+- `/upload/` 업로드 준비 UI
+- `incoming/` 기준 GitHub Actions 후처리
+- `data/images.json` 자동 생성
+
+포함되지 않는 것:
+
+- Cloudflare Worker 구현
+- 서버측 암호 검증
+- 실제 업로드 API 배포
+
+## 핵심 구조
+
+1. 정적 갤러리
    - `/`
-   - `data/images.json` 기준 월별 탐색
-2. GitHub Pages 업로드 페이지
+   - `data/images.json`을 읽는다.
+   - 날짜별 필터와 카드형 썸네일 UI를 렌더링한다.
+
+2. 정적 업로드 페이지
    - `/upload/`
-   - 드래그앤드롭, 최대 100장, 날짜/폴더/암호 입력
-3. 레포 전용 서버리스 업로드 API
-   - `TARGET_REPO`가 고정된 자기 레포 전용 엔드포인트
-   - 서버측 암호 검증
-   - GitHub REST API로 `incoming/` 기록
-4. GitHub Actions 후처리
-   - WebP 변환
-   - 썸네일 생성
-   - `images.json` 갱신
+   - 파일 선택, 드래그앤드롭, 날짜 입력, 암호 입력을 받는다.
+   - `incoming/YYYY-MM-DD/...` 경로 미리보기를 보여준다.
+   - Worker URL이 있으면 POST 요청을 보낼 준비가 되어 있다.
 
-## 중앙 업로드 구조에서 바뀐 점
+3. 이미지 후처리 스크립트
+   - `scripts/process-images.mjs`
+   - `incoming/2026-03-18/file.jpg`를 읽는다.
+   - `images/2026-03-18/file.webp`
+   - `thumbs/2026-03-18/file.webp`
+   - 위 두 경로로 결과를 만든다.
 
-이전:
+4. 데이터 생성 스크립트
+   - `scripts/generate-images-json.mjs`
+   - `images/`를 스캔해 `data/images.json`을 생성한다.
+   - 각 항목은 `src`, `thumb`, `date`, `title`, `filename`을 가진다.
 
-- 중앙 업로드 페이지
-- 운영자가 중앙 대상 레포를 바꿔 업로드를 분기
+## 날짜 구조
 
-현재:
+전체 구조는 `YYYY-MM-DD` 단일 날짜 폴더 기준이다.
 
-- 각 레포가 자기 업로드 페이지를 가짐
-- 각 레포가 자기 전용 업로드 API를 가짐
-- 업로드 API는 자기 레포 이름만 알고 있음
-- `filter-images-1/upload/`는 `filter-images-1`만 수정
-- `filter-images-2/upload/`는 `filter-images-2`만 수정
+- `incoming/2026-03-18/filename.ext`
+- `images/2026-03-18/filename.webp`
+- `thumbs/2026-03-18/filename.webp`
 
-## 요청 흐름
+즉, 이전처럼 `YYYY/MM` 또는 `YYYY/MM/DD`를 나누지 않는다.
 
-1. 사용자가 `/<repo>/upload/` 페이지에서 이미지, 날짜, 선택 폴더, 암호를 입력한다.
-2. 업로드 페이지가 `/api/auth`로 암호를 보낸다.
-3. 서버가 `UPLOAD_PASSWORD`를 검증하고 HttpOnly 세션 쿠키를 발급한다.
-4. 업로드 페이지가 같은 세션으로 `/api/upload`에 최대 100장의 파일을 보낸다.
-5. `/api/upload`는 인증이 없으면 401로 거부한다.
-6. API는 `TARGET_REPO` 기준으로 자기 레포만 대상으로 삼는다.
-7. API는 파일명을 정리하고 `incoming/YYYY/MM/optional-folder/`에 원본을 넣는다.
-8. 이때 GitHub Git Data API를 사용해 여러 파일을 한 커밋 흐름으로 기록한다.
-9. 레포의 GitHub Actions가 push를 감지한다.
-10. Actions가 아래 경로를 생성한다.
-   - `images/YYYY/MM/optional-folder/filename.webp`
-   - `thumbs/YYYY/MM/optional-folder/filename.webp`
-11. 같은 워크플로에서 `data/images.json`을 다시 만든다.
-12. GitHub Pages 갤러리가 월별 카드 UI로 이를 보여준다.
+## Worker 연동 지점
 
-## 저장소 역할
+Cloudflare Worker는 나중에 [assets/js/upload.js](/Users/seobeen/workspace/filter-images-template/assets/js/upload.js#L1)에서 연결한다.
 
-### `filter-images-template`
+현재 업로드 페이지는 [assets/js/config.js](/Users/seobeen/workspace/filter-images-template/assets/js/config.js#L1)의 `workerApiUrl`을 읽는다.
 
-- 템플릿 본체
-- 갤러리 페이지
-- 업로드 페이지
-- 후처리 스크립트
-- GitHub Actions 워크플로
-- 운영 문서
+- 값이 비어 있으면 payload만 준비한다.
+- 값이 있으면 해당 URL로 `FormData` POST 요청을 보낸다.
 
-### `filter-images-1`, `filter-images-2`, ...
+따라서 다음 단계에서는:
 
-- 템플릿에서 생성된 실제 이미지 저장소
-- 자기 갤러리와 자기 업로드 페이지 보유
-- 자기 업로드 API와 연결
+1. Worker 엔드포인트를 만든다.
+2. `workerApiUrl`에 그 주소를 넣는다.
+3. Worker가 `date`, `password`, `files`를 받아 GitHub에 기록하게 한다.
 
-### 각 레포 전용 업로드 API 배포
+## 템플릿 복제 후 수정 포인트
 
-- 업로드 암호와 세션 secret 보관
-- GitHub App 또는 token 보관
-- `TARGET_REPO`를 통해 자기 레포만 수정
+새 레포를 만들면 가장 먼저 바꿀 것은 [assets/js/config.js](/Users/seobeen/workspace/filter-images-template/assets/js/config.js#L1)다.
 
-## 보안 모델
+- `repoName`
+- `galleryBaseUrl`
+- `workerApiUrl`
+- `maxFiles`
 
-- 업로드 암호 검증은 서버에서만 수행
-- 브라우저에는 GitHub token, App private key, 암호가 저장되지 않음
-- `/api/upload`는 인증 쿠키가 없으면 본문 파싱 전 차단
-- API는 `TARGET_REPO`가 가리키는 단일 레포만 수정
-- GitHub App은 가능하면 해당 레포에만 설치
-- GitHub Pages는 정적 읽기 전용 공개 경로만 제공
+이 네 값만 바꿔도 정적 UI는 자기 레포 기준으로 바로 동작한다.

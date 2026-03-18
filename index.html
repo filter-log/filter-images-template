@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Filter Images Gallery</title>
+    <title>Filter Images Template</title>
     <meta
       name="description"
-      content="월별로 탐색하는 미니멀 이미지 갤러리. GitHub Pages와 GitHub Actions로 자동 갱신됩니다."
+      content="GitHub Pages로 배포하는 미니멀 사진 아카이브 템플릿. 날짜별 탐색과 업로드 도구 페이지를 함께 제공합니다."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,47 +20,48 @@
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Filter Log Image Library</p>
-          <h1>조용한 사진 아카이브</h1>
+          <p class="eyebrow">GitHub Pages Image Archive</p>
+          <h1 id="gallery-title">filter-images-template</h1>
           <p class="hero-description">
-            업로드된 이미지는 월별로 자동 정리되며, 각 카드에서 원본 보기와 URL/Markdown
-            복사를 바로 할 수 있습니다.
+            YYYY-MM-DD 단일 날짜 폴더를 기준으로 이미지를 정리하는 사진 아카이브 템플릿이다.
+            GitHub Pages는 공개 갤러리를, GitHub Actions는 이미지 후처리를 담당한다.
           </p>
           <div class="hero-actions">
-            <a class="hero-link secondary" href="upload/">이 레포 업로드</a>
-            <a class="hero-link" href="https://filter-log.github.io/" target="_blank" rel="noreferrer">
-              filter-log.github.io
+            <a class="hero-link secondary" href="upload/">업로드 도구</a>
+            <a class="hero-link" id="gallery-base-link" href="#" target="_blank" rel="noreferrer">
+              갤러리 기본 URL
             </a>
           </div>
         </div>
         <div class="hero-note">
-          <span>Repo-local Pages</span>
-          <strong>Gallery + Upload</strong>
+          <span>Template Repository</span>
+          <strong id="repo-badge">filter-images-template</strong>
+          <p class="hero-note-copy">새 레포를 만들면 이 구조가 그대로 복제된다.</p>
         </div>
       </header>
 
-      <section class="toolbar" aria-label="Gallery filters">
+      <section class="toolbar" aria-label="Date filters">
         <div class="toolbar-heading">
-          <p class="toolbar-label">Browse by month</p>
-          <h2>업로드 월 선택</h2>
+          <p class="toolbar-label">Browse by date</p>
+          <h2>업로드 날짜 탐색</h2>
         </div>
-        <div id="month-filters" class="month-filters" role="tablist" aria-label="Months"></div>
+        <div id="date-filters" class="filter-chips" role="tablist" aria-label="Dates"></div>
       </section>
 
       <section class="summary-strip" aria-live="polite">
         <div>
           <span class="summary-label">Visible Images</span>
-          <strong id="image-count">0</strong>
+          <strong id="visible-count">0</strong>
         </div>
         <div>
-          <span class="summary-label">Active Month</span>
-          <strong id="active-month">전체</strong>
+          <span class="summary-label">Active Date</span>
+          <strong id="active-date-label">전체</strong>
         </div>
       </section>
 
       <main>
         <div id="gallery-status" class="gallery-status">이미지 목록을 불러오는 중입니다.</div>
-        <section id="gallery-grid" class="gallery-grid" aria-live="polite"></section>
+        <div id="gallery-sections" class="gallery-sections"></div>
       </main>
     </div>
 
@@ -72,7 +73,6 @@
         <div class="card-body">
           <div class="card-meta">
             <p class="card-date"></p>
-            <p class="card-folder"></p>
           </div>
           <h3 class="card-title"></h3>
           <p class="card-filename"></p>
@@ -96,6 +96,7 @@
       </form>
     </dialog>
 
+    <script src="assets/js/config.js"></script>
     <script src="assets/js/gallery.js" type="module"></script>
   </body>
 </html>
