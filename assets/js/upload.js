@@ -80,7 +80,8 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
-  const payload = buildPayloadSummary();
+  const preparedFiles = buildPreparedFiles(state.files);
+  const payload = buildPayloadSummary(preparedFiles);
   renderPayloadPreview(payload);
 
   if (!workerApiBaseUrl) {
@@ -106,7 +107,7 @@ form.addEventListener("submit", async (event) => {
   setStatus("비밀번호를 확인하고 Cloudflare Worker로 업로드 요청을 준비하는 중입니다.");
 
   try {
-    const batches = buildUploadBatches(state.files);
+    const batches = buildUploadBatches(preparedFiles);
     const authToken = await authenticateWithWorker();
     const batchResponses = [];
 
@@ -205,13 +206,15 @@ function renderSelectedFiles() {
 
   selectionSummary.textContent = `${state.files.length}/${maxFiles} 이미지가 업로드 대기 중입니다.`;
 
-  state.files.forEach((file) => {
+  const preparedFiles = buildPreparedFiles(state.files);
+
+  preparedFiles.forEach((preparedFile) => {
     const card = document.createElement("article");
     card.className = "selected-card";
 
     const image = document.createElement("img");
-    image.alt = file.name;
-    image.src = URL.createObjectURL(file);
+    image.alt = preparedFile.originalName;
+    image.src = URL.createObjectURL(preparedFile.file);
     image.addEventListener("load", () => URL.revokeObjectURL(image.src), { once: true });
 
     const body = document.createElement("div");
@@ -219,15 +222,15 @@ function renderSelectedFiles() {
 
     const name = document.createElement("p");
     name.className = "selected-card-name";
-    name.textContent = file.name;
+    name.textContent = preparedFile.originalName;
 
     const meta = document.createElement("p");
     meta.className = "selected-card-meta";
-    meta.textContent = formatFileSize(file.size);
+    meta.textContent = formatFileSize(preparedFile.size);
 
     const pathNode = document.createElement("p");
     pathNode.className = "selected-card-path";
-    pathNode.textContent = buildTargetPath(file.name);
+    pathNode.textContent = preparedFile.targetPath;
 
     body.append(name, meta, pathNode);
     card.append(image, body);
@@ -252,8 +255,8 @@ function renderPayloadPreview(payload = buildPayloadSummary()) {
     : "현재는 Worker가 없어서 payload 구조만 준비합니다.";
 }
 
-function buildPayloadSummary() {
-  const batches = buildUploadBatches(state.files);
+function buildPayloadSummary(preparedFiles = buildPreparedFiles(state.files)) {
+  const batches = buildUploadBatches(preparedFiles);
 
   return {
     repoName,
@@ -266,25 +269,25 @@ function buildPayloadSummary() {
     maxFiles,
     maxBatchFiles,
     maxBatchBytes,
-    fileCount: state.files.length,
+    fileCount: preparedFiles.length,
     batchCount: batches.length,
     batches: batches.map((batch, index) => ({
       batchNumber: index + 1,
       fileCount: batch.length,
       totalBytes: getTotalBytes(batch),
       files: batch.map((file) => ({
-        originalName: file.name,
-        sanitizedName: sanitizeFilename(file.name),
+        originalName: file.originalName,
+        sanitizedName: file.uploadName,
         sizeBytes: file.size,
-        targetPath: buildTargetPath(file.name),
+        targetPath: file.targetPath,
       })),
     })),
-    files: state.files.map((file) => ({
-      originalName: file.name,
-      sanitizedName: sanitizeFilename(file.name),
+    files: preparedFiles.map((file) => ({
+      originalName: file.originalName,
+      sanitizedName: file.uploadName,
       sizeBytes: file.size,
-      mimeType: file.type,
-      targetPath: buildTargetPath(file.name),
+      mimeType: file.mimeType,
+      targetPath: file.targetPath,
     })),
   };
 }
@@ -315,7 +318,7 @@ async function submitPayload(payload, authToken, files) {
   formData.set("date", payload.date);
 
   files.forEach((file) => {
-    formData.append("files[]", file, sanitizeFilename(file.name));
+    formData.append("files[]", file.file, file.uploadName);
   });
 
   const response = await fetch(uploadEndpoint, {
@@ -443,6 +446,51 @@ function buildTargetPath(filename) {
   return `incoming/${readDate()}/${sanitizeFilename(filename)}`;
 }
 
+function buildPreparedFiles(files) {
+  const reservedNames = new Set();
+
+  return files.map((file) => {
+    const uploadName = reserveUploadName(file.name, reservedNames);
+
+    return {
+      file,
+      originalName: file.name,
+      uploadName,
+      size: Number(file.size || 0),
+      mimeType: file.type,
+      targetPath: `incoming/${readDate()}/${uploadName}`,
+    };
+  });
+}
+
+function reserveUploadName(filename, reservedNames) {
+  const sanitizedName = sanitizeFilename(filename);
+
+  if (!reservedNames.has(sanitizedName)) {
+    reservedNames.add(sanitizedName);
+    return sanitizedName;
+  }
+
+  const extension = sanitizedName.includes(".") ? sanitizedName.slice(sanitizedName.lastIndexOf(".")) : "";
+  const baseName = extension ? sanitizedName.slice(0, -extension.length) : sanitizedName;
+  const numericSuffix = extractNumericSuffix(baseName);
+  const familyBaseName = numericSuffix.suffix > 0 ? numericSuffix.baseName : baseName;
+  let suffix = Math.max(2, numericSuffix.suffix + 1 || 2);
+
+  while (suffix <= 10000) {
+    const candidate = `${familyBaseName}-${suffix}${extension}`;
+
+    if (!reservedNames.has(candidate)) {
+      reservedNames.add(candidate);
+      return candidate;
+    }
+
+    suffix += 1;
+  }
+
+  throw new Error(`동일한 파일명이 너무 많아 ${filename}의 업로드 이름을 만들 수 없습니다.`);
+}
+
 function sanitizeFilename(filename) {
   const extension = filename.includes(".") ? filename.slice(filename.lastIndexOf(".")).toLowerCase() : "";
   const stem = filename.includes(".") ? filename.slice(0, filename.lastIndexOf(".")) : filename;
@@ -455,6 +503,22 @@ function sanitizeFilename(filename) {
     .toLowerCase();
 
   return `${safeStem || "image"}${extension}`;
+}
+
+function extractNumericSuffix(baseName) {
+  const match = String(baseName).match(/^(.*?)-(\d+)$/);
+
+  if (!match) {
+    return {
+      baseName,
+      suffix: 0,
+    };
+  }
+
+  return {
+    baseName: match[1] || "image",
+    suffix: Number(match[2] || 0),
+  };
 }
 
 function readDate() {
