@@ -1,6 +1,6 @@
 window.UPLOAD_CONFIG = {
-  repoName: "filter-images-template",
-  galleryBaseUrl: "https://filter-log.github.io/filter-images-template",
+  repoName: "filter-archive-template",
+  galleryBaseUrl: "https://filter-log.github.io/filter-archive-template",
   workerApiUrl: "",
   maxFiles: 100,
 };

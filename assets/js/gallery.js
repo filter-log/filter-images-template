@@ -1,5 +1,8 @@
 const DATA_URL = "data/images.json";
 const config = window.UPLOAD_CONFIG || {};
+const TEMPLATE_REPO_NAME = "filter-archive-template";
+const LEGACY_TEMPLATE_REPO_NAME = "filter-images-template";
+const ARCHIVE_REPO_PREFIX = "filter-archive";
 
 const state = {
   items: [],
@@ -20,8 +23,8 @@ const dialogImage = document.getElementById("dialog-image");
 const dialogTitle = document.getElementById("dialog-title");
 const dialogLink = document.getElementById("dialog-link");
 
-const repoName = config.repoName || inferRepoName();
-const galleryBaseUrl = normalizeBaseUrl(config.galleryBaseUrl || inferGalleryBaseUrl());
+const repoName = resolveRepoName(config.repoName);
+const galleryBaseUrl = resolveGalleryBaseUrl(config.galleryBaseUrl);
 
 galleryTitle.textContent = `${repoName} 사진 아카이브`;
 repoBadge.textContent = repoName;
@@ -246,6 +249,30 @@ function normalizeBaseUrl(value) {
   return String(value || "").replace(/\/+$/, "");
 }
 
+function resolveRepoName(configuredRepoName) {
+  const normalizedConfiguredRepoName = normalizeConfiguredValue(configuredRepoName);
+  if (normalizedConfiguredRepoName && !isTemplateRepoName(normalizedConfiguredRepoName)) {
+    return normalizedConfiguredRepoName;
+  }
+
+  const inferredRepoName = inferRepoName();
+  if (isArchiveRepoName(inferredRepoName)) {
+    return inferredRepoName;
+  }
+
+  return normalizedConfiguredRepoName || TEMPLATE_REPO_NAME;
+}
+
+function resolveGalleryBaseUrl(configuredGalleryBaseUrl) {
+  const normalizedConfiguredGalleryBaseUrl = normalizeBaseUrl(configuredGalleryBaseUrl);
+  if (normalizedConfiguredGalleryBaseUrl && !isTemplateGalleryBaseUrl(normalizedConfiguredGalleryBaseUrl)) {
+    return normalizedConfiguredGalleryBaseUrl;
+  }
+
+  const inferredGalleryBaseUrl = inferGalleryBaseUrl();
+  return inferredGalleryBaseUrl || normalizedConfiguredGalleryBaseUrl;
+}
+
 function inferGalleryBaseUrl() {
   const { origin, pathname } = window.location;
   const cleanPath = pathname.replace(/index\.html$/, "").replace(/\/upload\/?$/, "/");
@@ -254,7 +281,25 @@ function inferGalleryBaseUrl() {
 
 function inferRepoName() {
   const pathParts = window.location.pathname.split("/").filter(Boolean);
-  return pathParts[0] || "filter-images-template";
+  return pathParts.find((part) => isArchiveRepoName(part)) || "";
+}
+
+function normalizeConfiguredValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isTemplateRepoName(value) {
+  const normalizedValue = normalizeConfiguredValue(value).toLowerCase();
+  return normalizedValue === TEMPLATE_REPO_NAME || normalizedValue === LEGACY_TEMPLATE_REPO_NAME;
+}
+
+function isTemplateGalleryBaseUrl(value) {
+  const normalizedValue = normalizeBaseUrl(value).toLowerCase();
+  return normalizedValue.endsWith(`/${TEMPLATE_REPO_NAME}`) || normalizedValue.endsWith(`/${LEGACY_TEMPLATE_REPO_NAME}`);
+}
+
+function isArchiveRepoName(value) {
+  return normalizeConfiguredValue(value).toLowerCase().startsWith(ARCHIVE_REPO_PREFIX);
 }
 
 async function copyText(value, button) {

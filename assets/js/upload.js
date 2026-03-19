@@ -1,9 +1,12 @@
 const config = window.UPLOAD_CONFIG || {};
+const TEMPLATE_REPO_NAME = "filter-archive-template";
+const LEGACY_TEMPLATE_REPO_NAME = "filter-images-template";
+const ARCHIVE_REPO_PREFIX = "filter-archive";
 const maxFiles = Number(config.maxFiles || 100);
 const maxBatchFiles = Number(config.maxBatchFiles || 10);
 const maxBatchBytes = Number(config.maxBatchBytes || 24 * 1024 * 1024);
-const repoName = config.repoName || inferRepoName();
-const galleryBaseUrl = normalizeBaseUrl(config.galleryBaseUrl || inferGalleryBaseUrl());
+const repoName = resolveRepoName(config.repoName);
+const galleryBaseUrl = resolveGalleryBaseUrl(config.galleryBaseUrl);
 const workerApiBaseUrl = normalizeWorkerBaseUrl(config.workerApiUrl || "");
 const authEndpoint = workerApiBaseUrl ? `${workerApiBaseUrl}/auth` : "";
 const uploadEndpoint = workerApiBaseUrl ? `${workerApiBaseUrl}/upload` : "";
@@ -590,6 +593,30 @@ function normalizeWorkerBaseUrl(value) {
   return normalizeBaseUrl(value).replace(/\/(?:auth|upload)$/, "");
 }
 
+function resolveRepoName(configuredRepoName) {
+  const normalizedConfiguredRepoName = normalizeConfiguredValue(configuredRepoName);
+  if (normalizedConfiguredRepoName && !isTemplateRepoName(normalizedConfiguredRepoName)) {
+    return normalizedConfiguredRepoName;
+  }
+
+  const inferredRepoName = inferRepoName();
+  if (isArchiveRepoName(inferredRepoName)) {
+    return inferredRepoName;
+  }
+
+  return normalizedConfiguredRepoName || TEMPLATE_REPO_NAME;
+}
+
+function resolveGalleryBaseUrl(configuredGalleryBaseUrl) {
+  const normalizedConfiguredGalleryBaseUrl = normalizeBaseUrl(configuredGalleryBaseUrl);
+  if (normalizedConfiguredGalleryBaseUrl && !isTemplateGalleryBaseUrl(normalizedConfiguredGalleryBaseUrl)) {
+    return normalizedConfiguredGalleryBaseUrl;
+  }
+
+  const inferredGalleryBaseUrl = inferGalleryBaseUrl();
+  return inferredGalleryBaseUrl || normalizedConfiguredGalleryBaseUrl;
+}
+
 function inferGalleryBaseUrl() {
   const { origin, pathname } = window.location;
   const cleanPath = pathname.replace(/\/upload\/?$/, "").replace(/index\.html$/, "");
@@ -598,5 +625,23 @@ function inferGalleryBaseUrl() {
 
 function inferRepoName() {
   const pathParts = window.location.pathname.split("/").filter(Boolean);
-  return pathParts[0] || "filter-images-template";
+  return pathParts.find((part) => isArchiveRepoName(part)) || "";
+}
+
+function normalizeConfiguredValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isTemplateRepoName(value) {
+  const normalizedValue = normalizeConfiguredValue(value).toLowerCase();
+  return normalizedValue === TEMPLATE_REPO_NAME || normalizedValue === LEGACY_TEMPLATE_REPO_NAME;
+}
+
+function isTemplateGalleryBaseUrl(value) {
+  const normalizedValue = normalizeBaseUrl(value).toLowerCase();
+  return normalizedValue.endsWith(`/${TEMPLATE_REPO_NAME}`) || normalizedValue.endsWith(`/${LEGACY_TEMPLATE_REPO_NAME}`);
+}
+
+function isArchiveRepoName(value) {
+  return normalizeConfiguredValue(value).toLowerCase().startsWith(ARCHIVE_REPO_PREFIX);
 }
